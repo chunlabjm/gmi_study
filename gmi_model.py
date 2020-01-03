@@ -270,6 +270,8 @@ def make_linear_model_formula(selected_input_data):
                 isRandom = "F"
         else:
             isRandom = "F"
+
+        # run_number는 sample 별로 붙어있는게 많아서 문제다
         if sub_dat.run_number.isnull().sum() / sub_dat.shape[0] <= 0.2:
             arr = sub_dat.run_number.unique()
             idx = [x is not np.nan for x in arr]
@@ -294,7 +296,10 @@ def make_linear_model_formula(selected_input_data):
 
 
 def evaluate_marker_traits(selected_input_data_transformed):
-        
+    
+    ## 1_randomforest_model_to_predict_disease_by_study
+    ## check auc by study
+
     studies = selected_input_data_transformed.study_uid.unique()
     
     param_grid = {
@@ -317,28 +322,37 @@ def evaluate_marker_traits(selected_input_data_transformed):
         tmp_dis = stdy_dat['host_disease'].unique()
         tmp_dis = tmp_dis[~pd.isnull(tmp_dis)]
         disease_list = tmp_dis[~pd.Series(tmp_dis).str.contains("\\|")]
-        disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
+#        disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
 
         for dis_nm in disease_list:
             print("Study : " + str(stdy) + ", disease : " + dis_nm)
+
+            # split case, control data in a study
             ctrl_tmp_dat = stdy_dat[stdy_dat['host_category'] == 'healthy']
+
             tmp_idx = pd.Series(stdy_dat['host_disease']).str.contains(dis_nm)
             tmp_idx[pd.isnull(tmp_idx)] = False
             case_tmp_dat = stdy_dat[tmp_idx]
 
+            # merge speicific disease case dataset and control dataset
             tmp_dat = pd.concat([ctrl_tmp_dat, case_tmp_dat], axis = 0)
             tmp_dat = tmp_dat.drop(['host_disease'],axis=1)
             tmp_dat = tmp_dat.dropna(axis=0)
+
+            # design random forest, k fold cross validation stratified
             seed = 0
             kfold = StratifiedKFold(n_splits=5, shuffle = True, random_state = seed)
             clf = RandomForestClassifier(class_weight = "balanced")
 
+            # dependant, independant variable
             y = pd.get_dummies(tmp_dat.host_category)['diseased']
             X = tmp_dat.drop(['host_category','study_uid','gms'], axis=1)
             
+            # grid search to find optimized hyperparameter for random forest by study
             gridforest = GridSearchCV(clf, param_grid, cv = kfold.split(X,y), n_jobs = -1, iid = True)
             gridforest.fit(X, y)
 
+            # calculated auc to measure optimized random forest performance
             y_pred = cross_val_predict(gridforest.best_estimator_,X, y, method = "predict_proba", cv = kfold.split(X,y))[:,1]
             auc_tmp = roc_auc_score(y_true = y.astype(int),
                                     y_score = y_pred)
@@ -363,23 +377,29 @@ def evaluate_marker_traits(selected_input_data_transformed):
         tmp_dis = stdy_dat['host_disease'].unique()
         tmp_dis = tmp_dis[~pd.isnull(tmp_dis)]
         disease_list = tmp_dis[~pd.Series(tmp_dis).str.contains("\\|")]
-        disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
+#        disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
 
         for dis_nm in disease_list:
             print("Study : " + str(stdy) + ", disease : " + dis_nm)
+
+            # split case, control data in a study
             ctrl_tmp_dat = stdy_dat[stdy_dat['host_category'] == 'healthy']
+
             tmp_idx = pd.Series(stdy_dat['host_disease']).str.contains(dis_nm)
             tmp_idx[pd.isnull(tmp_idx)] = False
             case_tmp_dat = stdy_dat[tmp_idx]
 
+            # merge speicific disease case dataset and control dataset
             tmp_dat = pd.concat([ctrl_tmp_dat, case_tmp_dat], axis = 0) # axis = 0 (default)
             tmp_dat = tmp_dat.drop(['host_disease'],axis=1)
             tmp_dat = tmp_dat.dropna(axis=0)
 
+            # design random forest, k fold cross validation stratified
             y = pd.get_dummies(tmp_dat.host_category)['diseased']
             X = tmp_dat.drop(['host_category','study_uid'], axis=1)
             markers = X.columns.to_list()
 
+            # triats' performance as marker by study, disease
             for mker in markers:
 
                 roc_auc_score(y, X.loc[:,mker])
@@ -467,7 +487,7 @@ def evaluate_marker_traits(selected_input_data_transformed):
     return viz_dat
 
 
-def find_hyperparameter_kfold(X, y, model_name="lasso", k=5):
+def find_hyperparameter_kfold(X, y, model_name="lasso"):
 
     if model_name == "lasso":
         param = {'c_values' : np.logspace(-2, 3, 100)}
@@ -509,13 +529,16 @@ def find_hyperparameter_kfold(X, y, model_name="lasso", k=5):
     else:
         print("Unknown or incorrect model name")
         return
-        
+
+    # hyperparameter combination
     allNames = param
     combinations = it.product(*(param[Name] for Name in allNames))
     param_list = list(combinations)
     
-    kfold = StratifiedKFold(n_splits=k, shuffle= True, random_state = 0)
+    # k-fold cross validation
+    kfold = StratifiedKFold(n_splits=5, shuffle= True, random_state = 0)
     
+    # evaluation auc each case
     res_auc_each_case = []
     
     itr = 0
@@ -558,11 +581,14 @@ def find_hyperparameter_kfold(X, y, model_name="lasso", k=5):
         res_tmp = pd.DataFrame(columns=['study_uid','y_true','y_pred'])
     
         for i, (train_idx, test_idx) in enumerate(kfold.split(X, y)):
+
+            # split train, test
             X_train = X.iloc[train_idx]
             X_test = X.iloc[test_idx]
             y_train = y.iloc[train_idx]
             y_test = y.iloc[test_idx]
 
+            # study weight
             study_weight = 1 / pd.crosstab(X_train['study_uid'],columns="count")
             tmp_df = pd.DataFrame(X_train['study_uid'])
             weight_df = pd.merge(tmp_df,study_weight,left_on="study_uid",right_index=True)
@@ -571,6 +597,7 @@ def find_hyperparameter_kfold(X, y, model_name="lasso", k=5):
             X_train = X_train.drop(['study_uid','host_disease'],axis=1)
             X_test = X_test.drop(['study_uid','host_disease'],axis=1)
 
+            # fit model and predict diseased status
             model.fit(X_train,y_train,sample_weight=weight_df['count'])
 
             y_pred = model.predict_proba(X_test)
@@ -631,7 +658,7 @@ def find_hyperparameter_kfold(X, y, model_name="lasso", k=5):
         
     return optimized_para_dict
 
-def evaluate_best_classifier_model(X, y, model_name, optimized_hparam = None):
+def evaluate_best_classifier_model(X, y, model_name, optimized_hparam):
     if model_name == "lasso":
         model = LogisticRegression(penalty = 'l1', C = optimized_hparam['c_values'], class_weight = "balanced",solver='liblinear')
     elif model_name == "ridge":
@@ -705,7 +732,7 @@ def evaluate_best_classifier_model(X, y, model_name, optimized_hparam = None):
         tmp_dis = stdy_dat['host_disease'].unique()
         tmp_dis = tmp_dis[~pd.isnull(tmp_dis)]
         disease_list = tmp_dis[~pd.Series(tmp_dis).str.contains("\\|")]
-        disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
+#        disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
         for d_disease in disease_list:
             ctrl_tmp = stdy_dat[stdy_dat.host_disease.isnull()]
             case_tmp = stdy_dat[~stdy_dat.host_disease.isnull()]
@@ -734,14 +761,16 @@ def evaluate_best_classifier_model(X, y, model_name, optimized_hparam = None):
     
 def modelling_to_classify_dysbiosis(selected_input_data_transformed, save_model = False, model_name = "randomforest"):
     
-    print("Randomforest model disased v.s. healthy")
-       
+    print(model_name + " model diseased v.s. healthy")
+
+    # test set   
     test_set = selected_input_data_transformed[selected_input_data_transformed['study_uid'] == 509]
     diseases = test_set.host_disease
     test_set_X = test_set.drop(['host_category','gms','host_disease'],axis=1)
     test_set_X = test_set_X.drop(['study_uid'],axis=1)
     test_set_y = pd.get_dummies(test_set.host_category)['diseased']
     
+    # train set
     dat = selected_input_data_transformed[selected_input_data_transformed['study_uid'] != 509]
     
     dat['study_uid'] = dat['study_uid'].astype(str).copy()
@@ -754,11 +783,13 @@ def modelling_to_classify_dysbiosis(selected_input_data_transformed, save_model 
     # 반응변수(y) dummy 변수
     y = pd.get_dummies(dat.host_category)['diseased']
     
-    optimized_hparam = find_hyperparameter_kfold(X, y, model_name, k = 5)
+    # search optimized hyperparameter
+    optimized_hparam = find_hyperparameter_kfold(X, y, model_name)
     model_results = evaluate_best_classifier_model(X, y, model_name, optimized_hparam = optimized_hparam)
     
+    # Randomforest_for_gmi_score_by_study (train auc)
     box_fig = sbm.vis.plot.box(model_results['scores']['y_pred'], model_results['scores']['study_uid'], subgroup=model_results['scores']['y_true'], figsize=(12,5))
-    sbm.vis.plot.save_fig(box_fig, 'Randomforest_for_gmi_score_by_study.pdf')
+    sbm.vis.plot.save_fig(box_fig, model_name + '_for_gmi_score_by_study.pdf')
     sbm.vis.plot.close_fig()
     
     if model_name == "lasso":
@@ -793,6 +824,7 @@ def modelling_to_classify_dysbiosis(selected_input_data_transformed, save_model 
         print("Unknown or incorrect model name")
         return
     
+    # predict test set
     study_weight = 1 / pd.crosstab(X['study_uid'],columns="count")
     tmp_df = pd.DataFrame(X['study_uid'])
     weight_df = pd.merge(tmp_df,study_weight,left_on="study_uid",right_index=True)
@@ -811,7 +843,7 @@ def modelling_to_classify_dysbiosis(selected_input_data_transformed, save_model 
     tmp_dis = diseases.unique()
     tmp_dis = tmp_dis[~pd.isnull(tmp_dis)]
     disease_list = tmp_dis[~pd.Series(tmp_dis).str.contains("\\|")]
-    disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
+#    disease_list = disease_list[~pd.Series(disease_list).str.contains("ibs_")]
     
     study_tmp = 509
     disease_tmp = []
@@ -844,12 +876,12 @@ def modelling_to_classify_dysbiosis(selected_input_data_transformed, save_model 
     sbm.vis.plot.save_fig(test_box_fig, 'Test_(Samsung)_set_GMI_score.pdf')
     sbm.vis.plot.close_fig()
     
-    print("Randomforest model disased v.s. healthy ... completed")
+    print(model_name + " model disased v.s. healthy ... completed")
     
-    pd.DataFrame(model.feature_importances_).to_csv("feature_importance_gbm.csv")
+    pd.DataFrame(model.feature_importances_).to_csv("feature_importance_" + model_name + ".csv")
 
     if save_model:
-        joblib.dump(model, 'Final_model_trained.pkl')
+        joblib.dump(model, 'Final_'+ model_name +'_trained.pkl')
 
     results = {"train_results" : model_results, "test_results" : auc_df}
 
