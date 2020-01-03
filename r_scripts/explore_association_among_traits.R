@@ -1,4 +1,4 @@
-args=commandArgs(TRUE)
+args <- commandArgs(TRUE)
 
 library(pvclust)
 library(gplots)
@@ -6,59 +6,64 @@ library(RColorBrewer)
 library(proxy)
 library(reghelper)
 
-input_path = args[1]
-is_test_mode = as.logical(args[2])
+input_path <- args[1]
+is_test_mode <- as.logical(args[2])
+
+if(is_test_mode){
+  disease_itr <- unique(selected_input_data_transformed$host_disease)
+  disease_itr <- disease_itr[-grep("\\|",disease_itr)]
+  disease_itr <- disease_itr[disease_itr != '']
+} else {
+  disease_itr <- unique(selected_input_data_transformed$host_disease)
+}
 
 selected_input_data_transformed <- read.table(input_path,sep="\t",head=T,fileEncoding = "utf-8",stringsAsFactors = F)
 
 study_itr <- unique(selected_input_data_transformed$study_uid)
-disease_itr <- unique(selected_input_data_transformed$host_disease)
-disease_itr <- disease_itr[-grep("\\|",disease_itr)]
-disease_itr <- disease_itr[disease_itr != '']
 
-process_itr <- 0 # iteration º¯¼ö
+process_itr <- 0 # iteration ë³€ìˆ˜
 
 for(study_nm in study_itr){
   
   process_itr <- process_itr + 1
   
-  study_uid <- c()                        # study_uid ÀúÀå º¤ÅÍ
-  diseases <- c()                         # study ³» disease ÀúÀå º¤ÅÍ
-  microbiota_markers <- c()               # study ³» marker ÀúÀå º¤ÅÍ
-  beta_glm <- c()                         # study ³» marker È¿°ú ÀúÀå º¤ÅÍ
-  p.values <- c()                         # study ³» marker È¿°ú¿¡ ´ëÇÑ p-value ÀúÀå º¤ÅÍ
+  study_uid <- c()                        # study_uid ì €ìž¥ ë²¡í„°
+  diseases <- c()                         # study ë‚´ disease ì €ìž¥ ë²¡í„°
+  microbiota_markers <- c()               # study ë‚´ marker ì €ìž¥ ë²¡í„°
+  beta_glm <- c()                         # study ë‚´ marker íš¨ê³¼ ì €ìž¥ ë²¡í„°
+  p.values <- c()                         # study ë‚´ marker íš¨ê³¼ì— ëŒ€í•œ p-value ì €ìž¥ ë²¡í„°
   
-  # study ¸¶´Ù ÁøÇàÇÏ±â À§ÇØ, µ¥ÀÌÅÍ ºÒ·¯¿À±â
+  # study ë§ˆë‹¤ ì§„í–‰í•˜ê¸° ìœ„í•´, ë°ì´í„° ë¶ˆëŸ¬ì˜¤ê¸°
   tmp_dat <- subset(selected_input_data_transformed,study_uid == study_nm)
   
   # marker traits dataset
   bio_traits_dat <- subset(tmp_dat,select=-c(X_id,host_category,host_disease,study_uid))
   y <- subset(tmp_dat,select=c(host_category,host_disease))
   
-  # marker traits list Á¤¸®                                         
+  # marker traits list ì •ë¦¬                                         
   marker_itr <- names(bio_traits_dat)
   
-  # ¸ðµç marker traits¿¡¼­ LMM°ú GLM (generalized linear model; ¿©±â¿¡¼± logistic regression) ½ÇÇà
+  # ëª¨ë“  marker traitsì—ì„œ LMMê³¼ GLM (generalized linear model; ì—¬ê¸°ì—ì„  logistic regression) ì‹¤í–‰
   for(marker_nm in marker_itr){
     
     glm_tmp_dat <- merge(data.frame(residuals = bio_traits_dat[,marker_nm],row.names=rownames(bio_traits_dat)),y,by="row.names",all.x=T)
     
-    # disease º° markerÀÇ È¿°ú¸¦ ±¸ÇÏ±â À§ÇÑ for ¹®
+    # disease ë³„ markerì˜ íš¨ê³¼ë¥¼ êµ¬í•˜ê¸° ìœ„í•œ for ë¬¸
     for(disease_nm in disease_itr){
       
-      if(!any(grepl(disease_nm, glm_tmp_dat$host_disease))) next # (±×·²¸® ¾ø°ÚÁö¸¸) disease ÀÌ¸§ÀÌ matchingÀÌ µÇÁö ¾ÊÀº skip
+      if(!any(grepl(disease_nm, glm_tmp_dat$host_disease))) next # (ê·¸ëŸ´ë¦¬ ì—†ê² ì§€ë§Œ) disease ì´ë¦„ì´ matchingì´ ë˜ì§€ ì•Šì€ skip
       
-      # ¿©·¯ Áúº´ÀÌ ÀÖÀ» ¼ö ÀÖ´Â study°¡ ÀÖÀ» ¼ö ÀÖ±â¿¡, Æ¯Á¤ disease¿Í control datset ºÒ·¯¿À±â
+      # ì—¬ëŸ¬ ì§ˆë³‘ì´ ìžˆì„ ìˆ˜ ìžˆëŠ” studyê°€ ìžˆì„ ìˆ˜ ìžˆê¸°ì—, íŠ¹ì • diseaseì™€ control datset ë¶ˆëŸ¬ì˜¤ê¸°
       sub_glm_tmp_dat <- subset(glm_tmp_dat,grepl(disease_nm, host_disease) | host_category == "healthy")
       
-      # healthy°¡ controlÀÓÀ» ¾Ë·ÁÁÖ´Â º¯¼ö ¼³Á¤
+      # healthyê°€ controlìž„ì„ ì•Œë ¤ì£¼ëŠ” ë³€ìˆ˜ ì„¤ì •
       sub_glm_tmp_dat$host_category <- factor(sub_glm_tmp_dat$host_category,levels=c('healthy','diseased'))
       
-      # imbalanced ¹®Á¦¸¦ ÇØ°áÇÏ±â À§ÇØ control, case ±ºÀ¸·Î ºÐ¸®
+      # imbalanced ë¬¸ì œë¥¼ í•´ê²°í•˜ê¸° ìœ„í•´ control, case êµ°ìœ¼ë¡œ ë¶„ë¦¬
       ctrl_tmp_dat <- subset(sub_glm_tmp_dat,host_category == "healthy")
       case_tmp_dat <- subset(sub_glm_tmp_dat,host_category != "healthy")
       
-      # n_control : n_case = 1:2 or 2:1 À» ³Ñ¾î°¥ °æ¿ì 1:2 or 2:1·Î ¸ðµ¨¸µ ÇÏ±â À§ÇÑ sampling ´Ü°è
+      # n_control : n_case = 1:2 or 2:1 ì„ ë„˜ì–´ê°ˆ ê²½ìš° 1:2 or 2:1ë¡œ ëª¨ë¸ë§ í•˜ê¸° ìœ„í•œ sampling ë‹¨ê³„
       if(nrow(ctrl_tmp_dat) / nrow(case_tmp_dat) > 2) {
         
         set.seed(0)
@@ -77,7 +82,7 @@ for(study_nm in study_itr){
         f_glm_dat <- rbind(ctrl_tmp_dat,case_tmp_dat)
       }
       
-      # GLM °á°ú¸¦ ÀúÀå
+      # GLM ê²°ê³¼ë¥¼ ì €ìž¥
       glm_res <- glm(host_category ~ residuals, data= f_glm_dat, family="binomial")
       
       tmp_beta <- beta(glm_res)$coefficients[2,1] # standized beta coefficient
@@ -104,7 +109,7 @@ for(study_nm in study_itr){
   
   itr <- 0
   
-  # °è»êµÈ p-value¸¦ FDR°ªÀ¸·Î º¯È¯ÇÏ±â À§ÇÑ for¹®
+  # ê³„ì‚°ëœ p-valueë¥¼ FDRê°’ìœ¼ë¡œ ë³€í™˜í•˜ê¸° ìœ„í•œ forë¬¸
   for(disease_nm in unique(res$diseases)){
     itr <- itr + 1
     tmp_res <- subset(res,diseases == disease_nm)
@@ -117,8 +122,11 @@ for(study_nm in study_itr){
   
 }
 
+# pvclust distance method cosine, clustering method complete, wardd2
+
 f_dat <- read.table("association_result.txt",head=T,sep="\t")
 
+# 479ë²ˆ 509ë²ˆ study ì œì™¸
 sig_dat <- subset(f_dat,p.values < 0.05 & !study_uid %in% c(509,479))
 
 colnm <- as.character(unique(paste(sig_dat$study_uid,sig_dat$diseases,sep="_")))
@@ -157,21 +165,14 @@ plot(res_clust,cex=0.3)
 pvrect(res_clust,alpha=0.95)
 dev.off()
 
+# heatmap default distance euclidean, clustering method complete
+
 my_palette <- colorRampPalette(c("blue", "white", "red"))(n = 199)
 
 col_breaks = c(seq(-1,-0.001,length=100),  # for red
-               seq(0,1,length=100))             # for green
+               seq(0,1,length=100))        # for green
 
 par(mar = c(0,0,0,0))
-
-cosine <- function(x) {
-  x <- as.matrix(x)
-  y <- t(x) %*% x
-  res <- 1 - y / (sqrt(diag(y)) %*% t(sqrt(diag(y))))
-  res <- as.dist(res)
-  attr(res, "method") <- "cosine"
-  return(res)
-}
 
 png(width = 1100, height = 1100, filename = "association_heatmap_complete.png",res = 220)
 heatmap.2(res_mat,

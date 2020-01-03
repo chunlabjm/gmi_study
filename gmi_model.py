@@ -36,14 +36,18 @@ if __name__ == "__main__":
 
 def generate_bio_traits(mtp_data, mtp_meta):
     
+    # profile table : species, class, family
     all_table_sp = sbm.mtp.util.profile(mtp_data, 'species')
     all_table_cl = sbm.mtp.util.profile(mtp_data,'class')
     all_table_fa = sbm.mtp.util.profile(mtp_data,'family')
+
     n_sample = all_table_sp.shape[0]
     id_vars = mtp_meta['_id']
     study_uids = mtp_meta['study_uid']
     host_categories = mtp_meta['host_category']
     total_read_cnt = sbm.mtp.util.num_reads(mtp_data)
+
+    # subsampling to normalize various sample sizes
     subsampling_table = sbm.mtp.util.random_subsampling(all_table_sp,n=5000, replace=True,seed = 0)
     
     # 1. calculate alpha diversity
@@ -60,11 +64,13 @@ def generate_bio_traits(mtp_data, mtp_meta):
                           'goods' : 1 - np.sum(profile_table == 1, axis=1) / total_read_cnt,
                           'pd' : sbm.func.div_pd(mtp_data),
                           'total_read_cnt' : total_read_cnt},
-                            index=mtp_meta.index.values)
+                          index = mtp_meta.index.values)
     print("1. alpha...completed")
     
     # 2. calculate beta diversity
     print("2. beta")
+
+    # rpy 성능때문에 프로세스 안에서 r 실행
     if n_sample > 3000:
         print("Because sample size > 3000, you should execute R in other kernel.")
     else:
@@ -73,12 +79,15 @@ def generate_bio_traits(mtp_data, mtp_meta):
     d_jsd = sbm.mtp.beta.jsd(profile_table)
     d_bc = sbm.mtp.beta.pdist(profile_table)
 
+    # r 에서 읽기 위한 distance input, study uid, csv 파일로 저장 (condition은 study효과를 없앤 beta diversity값을 구하기 위해)
     pd.DataFrame(d_jsd,columns=id_vars,index=id_vars).to_csv("jsd.csv",index=True,header=True)
     pd.DataFrame(d_bc,columns=id_vars,index=id_vars).to_csv("bc.csv",index=True,header=True)
     study_uids.to_csv("study_uid_for_condition.csv")
 
+    # r 실행
     os.system('Rscript r_scripts/dbRDA_for_GMI.R jsd.csv bc.csv study_uid_for_condition.csv')
     
+    # 결과파일 load
     dbrda_coord_jsd = pd.read_csv("dbrda_coord_jsd.csv",header = 0, index_col = 0)
     dbrda_coord_bc = pd.read_csv("dbrda_coord_bc.csv",header = 0, index_col = 0)
     
@@ -87,7 +96,7 @@ def generate_bio_traits(mtp_data, mtp_meta):
 
     print("2. beta...completed")
     
-    # 3. Dissimilarity healthy and diseased group
+    # 3. Dissimilarity healthy and diseased group (Anna karenina effects)
     print("3. Dissimilarity")
     healthy_avg_dist_jsd = [0]*len(d_jsd)
     healthy_avg_dist_bc = [0]*len(d_jsd)
@@ -98,6 +107,7 @@ def generate_bio_traits(mtp_data, mtp_meta):
     dysbiosis_avg_dist_jsd_in = [0]*len(d_jsd)
     dysbiosis_avg_dist_bc_in = [0]*len(d_jsd)
 
+    # calculate distance with other node
     for i in range(len(host_categories)):
         other_idx = list(set(range(len(d_jsd[i]))) - set([i]))
         tmp_category = host_categories[other_idx]
@@ -134,18 +144,20 @@ def generate_bio_traits(mtp_data, mtp_meta):
                           'dys_index' : sbm.func.dys_index(mtp_data),
                           'lact_index' : sbm.func.la_index(mtp_data),
                           'scfa_index' : sbm.func.scfa_index(mtp_data),
-                            'gms' : sbm.func.gms(mtp_data)})
+                          'gms' : sbm.func.gms(mtp_data)
+                          })
     print("4. Dysbiosis index...compledted")
     
     # 5. Microbiota abundance
-    print("5. Micro-abundance")
+    print("5. Profiling family, class level")
     family_ra = sbm.mtp.util.ra(mtp_data,'family')
     class_ra = sbm.mtp.util.ra(mtp_data,'class')
     
-    # 평균 0.01% 안되는 family 삭제
+    # 모든 샘플에서 평균 0.01% 안되는 family, class 삭제
     family_pass_ra = family_ra.mean(axis=0,skipna=True) >= 0.0001
     class_pass_ra = class_ra.mean(axis=0,skipna=True) >= 0.0001
-    
+
+    # clr transformation
     all_table_fa_clr = sbm.mtp.util.clr_transform(all_table_fa)
     all_table_cl_clr = sbm.mtp.util.clr_transform(all_table_cl)
     
@@ -154,10 +166,10 @@ def generate_bio_traits(mtp_data, mtp_meta):
 
     all_table_fa_clr['_id'] = id_vars
     all_table_cl_clr['_id'] = id_vars
-    print("5. Micro-abundance...completed")
+    print("5. Profiling family, class level...completed")
     
     # 6. Merge all data
-    print("6. Merge")
+    print("6. Merge data")
     res = mtp_meta[['_id','host_category','host_disease','study_uid','host_age','host_sex','host_bmi','platform','run_number',
                     'host_weight','host_height']]
     print(res.shape)
@@ -182,11 +194,49 @@ def generate_bio_traits(mtp_data, mtp_meta):
     
     return res
 
-def make_linear_model_formula(selected_input_data):
-    
-    import pandas as pd
-    import numpy as np
 
+def selecting_features(raw_data, add_gms = True):
+    
+    # meta, traits data 분리
+    sample_meta_features = ['_id','host_category','host_disease','study_uid','host_age','host_sex',
+                            'host_bmi','host_weight','host_height','total_read_cnt',
+                            'platform','run_number','gms']
+    
+    sample_meta_table = raw_data[sample_meta_features]
+    bio_traits_table = raw_data.drop(sample_meta_features,axis=1)
+
+    # correlation 계산
+    cor_table = bio_traits_table.corr(method='spearman')
+    cor_table.to_csv("marker_cor_final.csv")
+
+    # r 실행하여 feature selection
+    os.system('Rscript r_scripts/feature_selection_using_greedy_selection.R marker_cor_final.csv')
+    
+    # load output
+    selected_marker = pd.read_csv("heuristic_selected_marker.txt",header=None)
+    selected_marker = selected_marker[0].to_list()
+
+    # sub traits data table 생성
+    selected_traits_table = bio_traits_table[selected_marker]
+    selected_traits_table.index = sample_meta_table['_id']
+    
+    # merge with meta data
+    selected_raw_data = pd.merge(sample_meta_table,selected_traits_table,left_on='_id',right_index=True)
+    
+    # 기존 gms 고려할지 안할지에 대한 option
+    if ~add_gms:
+        selected_raw_data.drop(['gms'],axis=1)
+    
+    return selected_raw_data
+
+
+def make_linear_model_formula(selected_input_data):
+
+    # meta data가 disease state에 주는 효과를 제거하기 위해 linear model의 residual을 이용할 예정인데
+    # variable 형태에 따라 random variable을 고려한 모형을 고려해야 함
+    # platform, run_number를 고려할 경우 random variable로 취급하기로 정함
+    # study 마다 결측이 20% 미만일 경우, 모형 변수로 추가
+  
     study_uids = selected_input_data.study_uid.unique()
 
     form_list = []
@@ -242,33 +292,6 @@ def make_linear_model_formula(selected_input_data):
         'israndom' : random_list
     }).to_csv("lmm_formula.tsv",sep="\t")
 
-
-def selecting_features(raw_data, add_gms = True):
-    
-    sample_meta_features = ['_id','host_category','host_disease','study_uid','host_age','host_sex',
-                            'host_bmi','host_weight','host_height','total_read_cnt',
-                            'platform','run_number','gms']
-    
-    sample_meta_table = raw_data[sample_meta_features]
-    bio_traits_table = raw_data.drop(sample_meta_features,axis=1)
-    
-    cor_table = bio_traits_table.corr(method='spearman')
-    cor_table.to_csv("marker_cor_final.csv")
-
-    os.system('Rscript r_scripts/feature_selection_using_greedy_selection.R marker_cor_final.csv')
-    
-    selected_marker = pd.read_csv("heuristic_selected_marker.txt",header=None)
-    selected_marker = selected_marker[0].to_list()
-    
-    selected_traits_table = bio_traits_table[selected_marker]
-    selected_traits_table.index = sample_meta_table['_id']
-    
-    selected_raw_data = pd.merge(sample_meta_table,selected_traits_table,left_on='_id',right_index=True)
-    
-    if ~add_gms:
-        selected_raw_data.drop(['gms'],axis=1)
-    
-    return selected_raw_data
 
 def evaluate_marker_traits(selected_input_data_transformed):
         

@@ -1,4 +1,4 @@
-args=commandArgs(TRUE)
+args <- commandArgs(TRUE)
 
 library(lme4)
 library(reghelper)
@@ -8,6 +8,8 @@ is_test_mode = as.logical(args[2])
 
 selected_input_data <- read.table(selected_input_path,sep="\t",row.names=1,head=T,fileEncoding = "utf-8",stringsAsFactors = F)
 
+# ì‚¬ìš©ìž data (test data)ì¼ ê²½ìš° ì‹¤í–‰
+# bmi missingì„ weight, heightë¡œ ì§ì ‘ ê³„ì‚°í•´ì„œ imputation
 if(is_test_mode){
   for(i in 1:nrow(selected_input_data)){
     if(is.na(selected_input_data$host_bmi[i])) {
@@ -17,22 +19,29 @@ if(is_test_mode){
   selected_input_data$host_sex[selected_input_data$host_sex == ''] <- NA
   selected_input_data$host_sex[selected_input_data$host_sex == "0"] <- "male"
   selected_input_data$host_sex[selected_input_data$host_sex == "1"] <- "female"
+
+  # host_disease '|' ë¡œ ë³µìˆ˜ë¡œ ìžˆëŠ” ê²½ìš°ê°€ ìžˆìŒ (ì‚¬ìš©ìž ë°ì´í„°)
+  disease_itr <- unique(selected_input_data$host_disease)
+  disease_itr <- disease_itr[-grep("\\|",disease_itr)]
+  disease_itr <- disease_itr[disease_itr != '']
+} else {
+  disease_itr <- unique(selected_input_data$host_disease)
 }
 
+# character -> factor
 selected_input_data$host_category <- factor(selected_input_data$host_category,levels = c('diseased','healthy'))
 selected_input_data$study_uid <- factor(selected_input_data$study_uid)
 selected_input_data$host_sex <- factor(selected_input_data$host_sex)
 selected_input_data$host_disease <- factor(selected_input_data$host_disease)
 selected_input_data$platform <- factor(selected_input_data$platform)
 
+# study iteration object
 study_itr <- unique(selected_input_data$study_uid)
-disease_itr <- unique(selected_input_data$host_disease)
-disease_itr <- disease_itr[-grep("\\|",disease_itr)]
-disease_itr <- disease_itr[disease_itr != '']
 
-lmm_design <- read.table("test/lmm_design.txt",head = T, sep="\t", stringsAsFactors = F) # model method by study
+# model method by study
+lmm_design <- read.table("test/lmm_design.txt",head = T, sep="\t", stringsAsFactors = F)
 
-process_itr <- 0 # iteration º¯¼ö
+process_itr <- 0
 
 res_dat <- data.frame()
 
@@ -42,15 +51,15 @@ for(study_nm in study_itr){
   
   print(paste(process_itr," / ",length(study_itr)," ing... study_uid : ",study_nm, sep=""))
   
-  study_uid <- c()                        # study_uid ÀúÀå º¤ÅÍ
-  diseases <- c()                         # study ³» disease ÀúÀå º¤ÅÍ
-  microbiota_markers <- c()               # study ³» marker ÀúÀå º¤ÅÍ
-  beta_glm <- c()                         # study ³» marker È¿°ú ÀúÀå º¤ÅÍ
-  p.values <- c()                         # study ³» marker È¿°ú¿¡ ´ëÇÑ p-value ÀúÀå º¤ÅÍ
+  study_uid <- c()                        # study_uid ì €ìž¥ ë²¡í„°
+  diseases <- c()                         # study ë‚´ disease ì €ìž¥ ë²¡í„°
+  microbiota_markers <- c()               # study ë‚´ marker ì €ìž¥ ë²¡í„°
+  beta_glm <- c()                         # study ë‚´ marker íš¨ê³¼ ì €ìž¥ ë²¡í„°
+  p.values <- c()                         # study ë‚´ marker íš¨ê³¼ì— ëŒ€í•œ p-value ì €ìž¥ ë²¡í„°
   
   tmp_dat <- subset(selected_input_data,study_uid == study_nm)
   
-  # LM (linear model)À» À§ÇÑ covariate, dependant variable ºÐ¸®
+  # LM (linear model)ì„ ìœ„í•œ covariate, dependant variable ë¶„ë¦¬
   covariate_vars <- c('host_age','host_bmi','total_read_cnt','host_sex','host_weight','host_height','host_category','host_disease','run_number','platform')
   covariate_dat <- subset(tmp_dat,select = covariate_vars)
 
@@ -63,10 +72,10 @@ for(study_nm in study_itr){
     bio_traits_dat[,i] <- scale(bio_traits_dat[,i])
   }
   
-  # (±×·²¸®´Â ¾ø°ÚÁö¸¸) ¸ðµç »ùÇÃ¿¡¼­ 0 ÀÎ marker traits (scalingÇÏ¸é NaN µÇ´Â marker Á¦¿Ü)
+  # (ê·¸ëŸ´ë¦¬ëŠ” ì—†ê² ì§€ë§Œ) ëª¨ë“  ìƒ˜í”Œì—ì„œ 0 ì¸ marker traits (scalingí•˜ë©´ NaN ë˜ëŠ” marker ì œì™¸)
   bio_traits_dat <- bio_traits_dat[,!apply(bio_traits_dat,2,function(x) any(is.nan(x)))]
   
-  # marker traits list Á¤¸®                                         
+  # marker traits list ì •ë¦¬                                         
   marker_itr <- names(bio_traits_dat)
   
   id_dat <- subset(tmp_dat, select="X_id")
@@ -74,12 +83,12 @@ for(study_nm in study_itr){
   
   inner_itr <- 0
   
-  # ¸ðµç marker traits¿¡¼­ LMM°ú GLM (generalized linear model; ¿©±â¿¡¼± logistic regression) ½ÇÇà
+  # ëª¨ë“  marker traitsì—ì„œ LMMê³¼ GLM (generalized linear model; ì—¬ê¸°ì—ì„  logistic regression) ì‹¤í–‰
   for(marker_nm in marker_itr){
     
     inner_itr <- inner_itr + 1
     
-    # covariateÀÇ È¿°ú (°íÁ¤È¿°ú, ·£´ýÈ¿°ú)¸¦ Á¦°ÅÇÑ markerÀÇ residualÀ» »ý¼º
+    # covariateì˜ íš¨ê³¼ (ê³ ì •íš¨ê³¼, ëžœë¤íš¨ê³¼)ë¥¼ ì œê±°í•œ markerì˜ residualì„ ìƒì„±
     test_marker_dat <- subset(bio_traits_dat, select=marker_nm)
     lmm_tmp_dat <- cbind(covariate_dat,test_marker_dat)
     lmm_formula <- as.formula(paste(marker_nm," ~ 1 + ",lmm_design$variables[lmm_design$study_uid == study_nm],sep=""))

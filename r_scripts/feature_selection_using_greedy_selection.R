@@ -1,14 +1,14 @@
 #################
 # Heuristic selection of microbiota marker traits
-# spearman correlation > 0.5 adjacency matrix¸¦ »ı¼º
-# °¢ traitÀÇ degree(TrueÀÇ °¹¼ö)¸¦ ±¸ÇÔ
-# °¡Àå ³ôÀº degree¸¦ 'final marker?(µ¿Á¡ÀÏ ¶§, ·£´ı ¼±ÅÃ)'·Î Á¤ÇÔ
-# network (= adjacency matrix)¿¡¼­ final marker¿Í ±×°Í°ú ¿¬°áµÈ nodes (= traits)¸¦ Á¦°ÅÇÑ ÈÄ
-# À§ °úÁ¤À» ¹İº¹ÇÔ (°¹¼ö·Î break ÇÒ ¼ö ÀÖÀ¸³ª, ¿ì¼±Àº edge°¡ ÀÖ´Â °æ¿ì ¸ğµÎ selection)
-# 1 ´Ü°è¿¡¼­ adjacency matrix »ı¼º½Ã -2 step¿¡¼­ Á¦°ÅÇß´ø nodes´Â ÀçÅõÀÔÇÏ¿© ¼±Á¤
+# spearman correlation > 0.5 adjacency matrixë¥¼ ìƒì„±
+# ê° traitì˜ degree(Trueì˜ ê°¯ìˆ˜)ë¥¼ êµ¬í•¨
+# ê°€ì¥ ë†’ì€ degreeë¥¼ 'final marker?(ë™ì ì¼ ë•Œ, ëœë¤ ì„ íƒ)'ë¡œ ì •í•¨
+# network (= adjacency matrix)ì—ì„œ final markerì™€ ê·¸ê²ƒê³¼ ì—°ê²°ëœ nodes (= traits)ë¥¼ ì œê±°í•œ í›„
+# ìœ„ ê³¼ì •ì„ ë°˜ë³µí•¨ (ê°¯ìˆ˜ë¡œ break í•  ìˆ˜ ìˆìœ¼ë‚˜, ìš°ì„ ì€ edgeê°€ ìˆëŠ” ê²½ìš° ëª¨ë‘ selection)
+# 1 ë‹¨ê³„ì—ì„œ adjacency matrix ìƒì„±ì‹œ -2 stepì—ì„œ ì œê±°í–ˆë˜ nodesëŠ” ì¬íˆ¬ì…í•˜ì—¬ ì„ ì •
 #################
 
-args=commandArgs(TRUE)
+args <- commandArgs(TRUE)
 
 input_path <- args[1]
 
@@ -16,7 +16,7 @@ dat <- read.table(args[1],sep=",",row.names=1,head=T)
 
 mat <- as.matrix(dat)
 
-# upper diagonal matrix ÀÌ¿ë
+# generating upper diagonal matrix
 mat[lower.tri(mat)] <- -9
 diag(mat) <- -9
 
@@ -45,5 +45,5 @@ while(TRUE){
   tmp_rm_nodes_index <- which(traits_nm %in% names(which(adj_mat[which.max(dgrees),] > 0)))
 }
 
-# python¿¡¼­ ÀĞÀ» ¼ö ÀÖµµ·Ï txt·Î ÀúÀå
+# main process by python
 write.table(unique(rm_nodes),"heuristic_selected_marker.txt",row.names=F,col.names=F,quote=F,sep=",")

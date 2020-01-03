@@ -1,4 +1,4 @@
-args=commandArgs(TRUE)
+args <- commandArgs(TRUE)
 
 library(vegan)
 
@@ -15,10 +15,10 @@ env_var <- cond
 d_jsd <- as.dist(d_jsd)
 d_bc <- as.dist(d_bc)
 
+cat("dbRDA starts \n")
 db_rda_jsd <- capscale(d_jsd~Condition(env_var$cond))
 db_rda_bc <- capscale(d_bc~Condition(env_var$cond))
 
-cat("dbRDA starts \n")
 dbrda_coord_jsd = as.data.frame(summary(db_rda_jsd)$sites)
 dbrda_coord_bc = as.data.frame(summary(db_rda_bc)$sites)
 
