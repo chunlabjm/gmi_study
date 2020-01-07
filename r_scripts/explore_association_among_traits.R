@@ -9,6 +9,8 @@ library(reghelper)
 input_path <- args[1]
 is_test_mode <- as.logical(args[2])
 
+selected_input_data_transformed <- read.table(input_path,sep="\t",head=T,fileEncoding = "utf-8",stringsAsFactors = F)
+
 if(is_test_mode){
   disease_itr <- unique(selected_input_data_transformed$host_disease)
   disease_itr <- disease_itr[-grep("\\|",disease_itr)]
@@ -16,8 +18,6 @@ if(is_test_mode){
 } else {
   disease_itr <- unique(selected_input_data_transformed$host_disease)
 }
-
-selected_input_data_transformed <- read.table(input_path,sep="\t",head=T,fileEncoding = "utf-8",stringsAsFactors = F)
 
 study_itr <- unique(selected_input_data_transformed$study_uid)
 
@@ -59,32 +59,24 @@ for(study_nm in study_itr){
       # healthy가 control임을 알려주는 변수 설정
       sub_glm_tmp_dat$host_category <- factor(sub_glm_tmp_dat$host_category,levels=c('healthy','diseased'))
       
-      # imbalanced 문제를 해결하기 위해 control, case 군으로 분리
+      # imbalanced 문제를 해결하기 위해 class weights 지정
       ctrl_tmp_dat <- subset(sub_glm_tmp_dat,host_category == "healthy")
       case_tmp_dat <- subset(sub_glm_tmp_dat,host_category != "healthy")
+
+      f_glm_dat <- rbind(ctrl_tmp_dat,case_tmp_dat)
       
-      # n_control : n_case = 1:2 or 2:1 을 넘어갈 경우 1:2 or 2:1로 모델링 하기 위한 sampling 단계
-      if(nrow(ctrl_tmp_dat) / nrow(case_tmp_dat) > 2) {
-        
-        set.seed(0)
-        ctrl_dat_n <- nrow(case_tmp_dat) * 2
-        ctrl_dat <- ctrl_tmp_dat[sample(1:nrow(ctrl_tmp_dat),ctrl_dat_n),]
-        f_glm_dat <- rbind(ctrl_dat,case_tmp_dat)
-        
-      } else if(nrow(ctrl_tmp_dat) / nrow(case_tmp_dat) < 0.5) {
-        
-        set.seed(0)
-        case_dat_n <- nrow(ctrl_tmp_dat) * 2
-        case_dat <- case_tmp_dat[sample(1:nrow(case_tmp_dat),case_dat_n),]
-        f_glm_dat <- rbind(ctrl_tmp_dat,case_dat)
-        
-      } else {
-        f_glm_dat <- rbind(ctrl_tmp_dat,case_tmp_dat)
-      }
-      
+      ctrl_dat_n <- nrow(ctrl_tmp_dat)
+      case_dat_n <- nrow(case_tmp_dat)
+
+      weight_tmp <- c(rep(1, ctrl_dat_n), rep(ctrl_dat_n / case_dat_n, case_dat_n))
+
+      not_na_idx <- !is.na(f_glm_dat$residuals)
+      f_glm_dat <- f_glm_dat[not_na_idx,]
+      weight_tmp <- weight_tmp[not_na_idx]
+
       # GLM 결과를 저장
-      glm_res <- glm(host_category ~ residuals, data= f_glm_dat, family="binomial")
-      
+      glm_res <- glm(host_category ~ residuals, data= f_glm_dat, family="binomial", weights = weight_tmp)
+
       tmp_beta <- beta(glm_res)$coefficients[2,1] # standized beta coefficient
       glm_smr <- summary(glm_res)
       

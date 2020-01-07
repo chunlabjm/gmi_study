@@ -26,21 +26,21 @@ print("0_Loading_profile")
 # 'host_sex' : '' 있는지 확인, 0, 1로 코딩되어 있다면 male, female로 변환
 # 'host_bmi' : height와 weight로 계산할 수 있으면 결측값 채우기
 
-mtp_data = sbm.mtp.load_data('test/test.json')
-mtp_meta = pd.read_csv('test/test_meta.tsv',index_col=0,low_memory=False)
+#mtp_data = sbm.mtp.load_data('test/test.json')
+#mtp_meta = pd.read_csv('test/test_meta.tsv',index_col=0,low_memory=False)
 
 # 0479 : elderly study 제거
-sub_mtp_data = sbm.mtp.filter_data(mtp_data, mtp_meta.study_uid != 479)
-sub_mtp_meta = mtp_meta[mtp_meta.study_uid != 479]
+#sub_mtp_data = sbm.mtp.filter_data(mtp_data, mtp_meta.study_uid != 479)
+#sub_mtp_meta = mtp_meta[mtp_meta.study_uid != 479]
 
-input_data = gm.generate_bio_traits(sub_mtp_data, sub_mtp_meta)
+#input_data = gm.generate_bio_traits(sub_mtp_data, sub_mtp_meta)
 
-selected_input_data = gm.selecting_features(input_data, add_gms=True)
-selected_input_data.to_csv("selected_input_data.tsv",sep='\t')
+#selected_input_data = gm.selecting_features(input_data, add_gms=True)
+#selected_input_data.to_csv("selected_input_data.tsv",sep='\t')
 
-gm.make_linear_model_formula(selected_input_data)
+#gm.make_linear_model_formula(selected_input_data)
 
-os.system('Rscript r_scripts/calculate_residuals_using_lm.R selected_input_data.tsv TRUE')
+#os.system('Rscript r_scripts/calculate_residuals_using_lm.R selected_input_data.tsv TRUE')
 
 selected_input_data_transformed = pd.read_csv("selected_input_data_transformed.tsv",sep="\t",index_col=0)
 
@@ -51,7 +51,7 @@ print("2_Evaluating_marker_as_predictor")
 result_trait_auc = gm.evaluate_marker_traits(selected_input_data_transformed)
 
 print("3_GMI_model")
-model_results = gm.modelling_to_classify_dysbiosis(selected_input_data_transformed, save_model = True, model_name = "gbm")
+model_results = gm.modelling_to_classify_dysbiosis(selected_input_data_transformed, save_model = True, model_name = "randomforest")
 train_results = model_results['train_results']['auc'].drop(['model'],axis=1)
 train_results['study_uid'] = train_results['study_uid'].apply(int)
 
@@ -87,6 +87,6 @@ new_col = new_col + new_col2
 results_ordered = results[new_col].copy()
 results_ordered.rename(columns={'auc':'AUC_GMI'}, inplace=True)
 
-results_ordered.to_csv("results_190103_gbm_BC_removed.csv")
+results_ordered.to_csv("results_190103_randomforest_BC_removed.csv")
 
 print("4_save_1+2+3_results ... completed")

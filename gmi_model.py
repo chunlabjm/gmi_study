@@ -48,12 +48,11 @@ def generate_bio_traits(mtp_data, mtp_meta):
     total_read_cnt = sbm.mtp.util.num_reads(mtp_data)
 
     # subsampling to normalize various sample sizes
-    subsampling_table = sbm.mtp.util.random_subsampling(all_table_sp,n=5000, replace=True,seed = 0)
+    subsampling_table = sbm.mtp.util.random_subsampling(all_table_sp,n=1000, replace=True,seed = 0)
     
     # 1. calculate alpha diversity
     print("1. alpha")
     profile_table = subsampling_table.copy()
-    #profile_table = all_table_sp.copy()
     alpha_df = pd.DataFrame({
                           '_id' : id_vars,
                           'shannon' : sbm.mtp.alpha.shannon(profile_table),
